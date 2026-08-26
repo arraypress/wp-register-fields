@@ -20,6 +20,7 @@ use ArrayPress\FieldKit\Field;
 use ArrayPress\FieldKit\FieldSet;
 use ArrayPress\FieldKit\Registry;
 use ArrayPress\FieldKit\Support\Badge;
+use ArrayPress\FieldKit\Support\Sections;
 use ArrayPress\FieldKit\Support\Tooltip;
 use WP_User;
 
@@ -191,13 +192,7 @@ class UserFields {
 
 		printf( '<h2>%s</h2>', esc_html( $this->section_title ) );
 
-		echo '<table class="form-table" role="presentation"><tbody>';
-
-		foreach ( $fields as $field ) {
-			$this->render_row( $field );
-		}
-
-		echo '</tbody></table>';
+		echo $this->render_sections( $fields ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 	}
 
 	/**
@@ -222,13 +217,58 @@ class UserFields {
 
 		printf( '<h2>%s</h2>', esc_html( $this->section_title ) );
 
+		echo $this->render_sections( $fields ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+	}
+
+	/**
+	 * Render fields, honouring any tab or accordion markers among them.
+	 *
+	 * Without this the markers arrived at render_row() as ordinary fields,
+	 * drew nothing, and a set meant to be tabbed came out as one flat list.
+	 *
+	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 *
+	 * @return string
+	 */
+	private function render_sections( array $fields ): string {
+		$layout = Sections::split( $fields );
+
+		if ( [] === $layout ) {
+			return $this->render_table( $fields );
+		}
+
+		return Sections::render(
+			$layout,
+			fn( array $group ): string => [] === $group ? '' : $this->render_table( $group ),
+			$this->id
+		);
+	}
+
+	/**
+	 * Render a set of fields as a settings table.
+	 *
+	 * A marker draws nothing, so one left in the list emits an empty row.
+	 *
+	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 *
+	 * @return string
+	 */
+	private function render_table( array $fields ): string {
+		ob_start();
+
 		echo '<table class="form-table" role="presentation"><tbody>';
 
 		foreach ( $fields as $field ) {
+			if ( Sections::is_marker( $field ) ) {
+				continue;
+			}
+
 			$this->render_row( $field );
 		}
 
 		echo '</tbody></table>';
+
+		return (string) ob_get_clean();
 	}
 
 	/**

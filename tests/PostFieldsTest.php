@@ -227,9 +227,97 @@ final class PostFieldsTest extends TestCase {
 
 		$this->assertStringContainsString( 'role="tablist"', $html );
 		$this->assertStringContainsString( '>Files</span>', $html );
-		$this->assertStringContainsString( 'dashicons-media-default', $html );
+		// A tab is its label: core draws no glyph on .nav-tab and neither
+		// does the kit, even when a panel offers one.
+		$this->assertStringNotContainsString( 'dashicons', $html );
 		$this->assertStringContainsString( 'name="file_url"', $html );
 		$this->assertStringContainsString( 'name="note"', $html );
+	}
+
+	/**
+	 * A `tab` field divides the metabox, rather than doing nothing.
+	 *
+	 * The markers only ever worked when FieldSet did the drawing. This class
+	 * builds its own form-table and asks the kit for one control at a time,
+	 * so they arrived here as ordinary fields, rendered nothing, and a
+	 * metabox meant to be tabbed came out as one flat list.
+	 */
+	public function test_tab_fields_divide_the_metabox(): void {
+		$html = $this->render(
+			$this->metabox(
+				[
+					'fields' => [
+						'general'  => [ 'type' => 'tab', 'label' => 'General' ],
+						'name'     => [ 'type' => 'text', 'label' => 'Name' ],
+						'advanced' => [ 'type' => 'tab', 'label' => 'Advanced' ],
+						'slug'     => [ 'type' => 'text', 'label' => 'Slug' ],
+					],
+				]
+			)
+		);
+
+		$this->assertStringContainsString( 'role="tablist"', $html );
+		$this->assertStringContainsString( '>General</span>', $html );
+		$this->assertStringContainsString( '>Advanced</span>', $html );
+
+		// Both fields are still in the form -- switching tabs is not a
+		// filter, and a value in a hidden panel still saves.
+		$this->assertStringContainsString( 'name="name"', $html );
+		$this->assertStringContainsString( 'name="slug"', $html );
+
+		// The markers themselves draw no row of their own.
+		$this->assertStringNotContainsString( 'name="general"', $html );
+		$this->assertStringNotContainsString( 'name="advanced"', $html );
+	}
+
+	/**
+	 * An `accordion` field does the same as a disclosure widget.
+	 */
+	public function test_accordion_fields_divide_the_metabox(): void {
+		$html = $this->render(
+			$this->metabox(
+				[
+					'fields' => [
+						'delivery' => [ 'type' => 'accordion', 'label' => 'Delivery' ],
+						'method'   => [ 'type' => 'text', 'label' => 'Method' ],
+						'billing'  => [ 'type' => 'accordion', 'label' => 'Billing', 'open' => false ],
+						'vat'      => [ 'type' => 'text', 'label' => 'VAT number' ],
+					],
+				]
+			)
+		);
+
+		$this->assertSame( 2, substr_count( $html, '<details' ) );
+		$this->assertStringContainsString( '>Delivery</summary>', $html );
+		$this->assertStringContainsString( '>Billing</summary>', $html );
+
+		// The first is open and the second said not to be.
+		$this->assertSame( 1, substr_count( $html, '<details class="field-kit__accordion" open>' ) );
+	}
+
+	/**
+	 * One marker is not a division.
+	 *
+	 * A tab strip with a single tab is furniture that does nothing, so a lone
+	 * marker is dropped and the fields render flat.
+	 */
+	public function test_a_single_marker_is_not_a_tab_strip(): void {
+		$html = $this->render(
+			$this->metabox(
+				[
+					'fields' => [
+						'general' => [ 'type' => 'tab', 'label' => 'General' ],
+						'name'    => [ 'type' => 'text', 'label' => 'Name' ],
+					],
+				]
+			)
+		);
+
+		$this->assertStringNotContainsString( 'role="tablist"', $html );
+		$this->assertStringContainsString( 'name="name"', $html );
+
+		// And it leaves no empty row behind where it was.
+		$this->assertSame( 1, substr_count( $html, '<tr' ) );
 	}
 
 	/**

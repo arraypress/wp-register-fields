@@ -14,6 +14,7 @@ namespace ArrayPress\RegisterFields;
 
 use ArrayPress\FieldKit\Assets;
 use ArrayPress\FieldKit\Support\Badge;
+use ArrayPress\FieldKit\Support\Sections;
 use ArrayPress\FieldKit\Support\Tooltip;
 use ArrayPress\FieldKit\Context\EncryptedContext;
 use ArrayPress\FieldKit\Contracts\Context;
@@ -177,16 +178,32 @@ class TermFields {
 	 * @return void
 	 */
 	public function render_add_form(): void {
-		foreach ( $this->visible_fields() as $field ) {
-			printf(
-				'<div class="form-field term-%s-wrap">%s</div>',
-				esc_attr( $field->key() ),
-				// The kit escapes every value at the point it builds an
-				// attribute, so this is already safe markup; a kses pass here
-				// would only strip valid output.
-				$this->set->render_field( $field ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- see comment.
-			);
-		}
+		$fields = $this->visible_fields();
+		$layout = Sections::split( $fields );
+
+		$render = function ( array $group ): string {
+			$markup = '';
+
+			foreach ( $group as $field ) {
+				if ( Sections::is_marker( $field ) ) {
+					continue;
+				}
+
+				$markup .= sprintf(
+					'<div class="form-field term-%s-wrap">%s</div>',
+					esc_attr( $field->key() ),
+					// The kit escapes every value at the point it builds an
+					// attribute, so this is already safe markup; a kses pass
+					// here would only strip valid output.
+					$this->set->render_field( $field ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- see comment.
+				);
+			}
+
+			return $markup;
+		};
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+		echo [] === $layout ? $render( $fields ) : Sections::render( $layout, $render, $this->id . '-add' );
 	}
 
 	/**
@@ -198,7 +215,66 @@ class TermFields {
 	 * @return void
 	 */
 	public function render_edit_form( WP_Term $term, string $taxonomy ): void {
-		foreach ( $this->visible_fields( $term->term_id ) as $field ) {
+		$fields = $this->visible_fields( $term->term_id );
+		$layout = Sections::split( $fields );
+
+		if ( [] !== $layout ) {
+			/*
+			 * These rows go into a table core opened, so a <details> or a tab
+			 * strip cannot sit between them -- neither is table content, and
+			 * a browser hoists it out of the table entirely. The whole set of
+			 * sections therefore goes inside one row that spans both columns,
+			 * with each section holding a form-table of its own. That is the
+			 * same shape a spans_row() field already gets here.
+			 */
+			$sections = Sections::render(
+				$layout,
+				fn( array $group ): string => [] === $group ? '' : $this->render_edit_table( $group ),
+				$this->id
+			);
+
+			printf(
+				'<tr class="form-field field-kit__spans-row"><td colspan="2">%s</td></tr>',
+				$sections // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+			);
+
+			return;
+		}
+
+		$this->render_edit_rows( $fields );
+	}
+
+	/**
+	 * One section's fields, as a table of their own.
+	 *
+	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 *
+	 * @return string
+	 */
+	private function render_edit_table( array $fields ): string {
+		ob_start();
+
+		echo '<table class="form-table" role="presentation"><tbody>';
+		$this->render_edit_rows( $fields );
+		echo '</tbody></table>';
+
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * The fields as table rows.
+	 *
+	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 *
+	 * @return void
+	 */
+	private function render_edit_rows( array $fields ): void {
+		foreach ( $fields as $field ) {
+			// A marker draws nothing, so one left in emits an empty row.
+			if ( Sections::is_marker( $field ) ) {
+				continue;
+			}
+
 			// A layout field or a panel has no label to sit beside: a header
 			// cell would indent it as though it labelled a control.
 			if ( $field->type()->spans_row() ) {

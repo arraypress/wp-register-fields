@@ -22,6 +22,7 @@ use ArrayPress\FieldKit\Registry as TypeRegistry;
 use ArrayPress\FieldKit\Support\Badge;
 use ArrayPress\FieldKit\Support\Tooltip;
 use ArrayPress\FieldKit\Support\PanelTabs;
+use ArrayPress\FieldKit\Support\Sections;
 use WP_Post;
 
 /**
@@ -285,7 +286,7 @@ class PostFields {
 		if ( [] !== (array) $this->config['panels'] ) {
 			echo $this->render_panels( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 		} else {
-			echo $this->render_table( $this->visible_fields( $post->ID ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+			echo $this->render_sections( $this->visible_fields( $post->ID ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 		}
 
 		echo '</div>';
@@ -323,9 +324,10 @@ class PostFields {
 				continue;
 			}
 
+			// No icon: a panel is a tab, a tab is its label, and the kit
+			// draws none.
 			$panels[ (string) $slug ] = [
 				'label'   => (string) ( $panel['label'] ?? $slug ),
-				'icon'    => (string) ( $panel['icon'] ?? '' ),
 				'content' => $this->render_table( array_values( $in_panel ) ),
 			];
 		}
@@ -334,7 +336,39 @@ class PostFields {
 	}
 
 	/**
+	 * Render fields, honouring any tab or accordion markers among them.
+	 *
+	 * `panels` is this class's own way of tabbing a metabox: the caller
+	 * names the panels and lists which fields go in each. A `tab` or
+	 * `accordion` field is the kit's way, and divides the list in place.
+	 * Both end up as the same tab strip; they are different ways of saying
+	 * it, and a metabox uses one or the other.
+	 *
+	 * Without this the markers arrived here as ordinary fields, rendered
+	 * nothing, and a tabbed metabox came out as one flat list.
+	 *
+	 * @param Field[] $fields The fields.
+	 *
+	 * @return string
+	 */
+	private function render_sections( array $fields ): string {
+		$layout = Sections::split( $fields );
+
+		if ( [] === $layout ) {
+			return $this->render_table( $fields );
+		}
+
+		return Sections::render(
+			$layout,
+			fn( array $group ): string => [] === $group ? '' : $this->render_table( $group ),
+			$this->id
+		);
+	}
+
+	/**
 	 * Render a set of fields as a settings table.
+	 *
+	 * A marker draws nothing, so one left in the list emits an empty row.
 	 *
 	 * @param Field[] $fields The fields.
 	 *
@@ -346,6 +380,10 @@ class PostFields {
 		echo '<table class="form-table" role="presentation"><tbody>';
 
 		foreach ( $fields as $field ) {
+			if ( Sections::is_marker( $field ) ) {
+				continue;
+			}
+
 			$this->render_row( $field );
 		}
 
