@@ -1,0 +1,66 @@
+{
+  "name": "arraypress/wp-register-fields",
+  "description": "Register custom fields on posts, terms, users, quick edit and bulk edit.",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "homepage": "https://github.com/arraypress/wp-register-fields/",
+  "authors": [
+    {
+      "name": "David Sherlock",
+      "homepage": "https://arraypress.com/"
+    }
+  ],
+  "require": {
+    "php": ">=8.3",
+    "arraypress/wp-field-kit": "^1.0"
+  },
+  "require-dev": {
+    "phpcompatibility/phpcompatibility-wp": "^2.1",
+    "phpunit/phpunit": "^12.0",
+    "squizlabs/php_codesniffer": "^3.13.5",
+    "wp-coding-standards/wpcs": "^3.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "ArrayPress\\RegisterFields\\": "src/"
+    },
+    "files": [
+      "src/Functions.php"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "ArrayPress\\RegisterFields\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "lint": "phpcs",
+    "format": "phpcbf --standard=phpcs-format.xml.dist",
+    "format:check": "phpcs --standard=phpcs-format.xml.dist"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true,
+    "preferred-install": {
+      "arraypress/wp-field-kit": "source",
+      "*": "dist"
+    },
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "support": {
+    "issues": "https://github.com/arraypress/wp-register-fields/issues",
+    "source": "https://github.com/arraypress/wp-register-fields"
+  },
+  "keywords": [
+    "wordpress",
+    "fields",
+    "metabox",
+    "meta",
+    "arraypress"
+  ]
+}
