@@ -668,4 +668,132 @@ final class PostFieldsTest extends TestCase {
 		$this->assertSame( 'blue', $metabox->get_value( 11, 'colour' ) );
 	}
 
+	/**
+	 * A metabox with a required field and a validated one.
+	 *
+	 * @return PostFields
+	 */
+	private function validated(): PostFields {
+		return $this->metabox(
+			[
+				'fields' => [
+					'colour'  => [
+						'type'     => 'text',
+						'label'    => 'Colour',
+						'required' => true,
+					],
+					'contact' => [
+						'type'     => 'text',
+						'label'    => 'Contact',
+						'validate' => 'email',
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * A refused value is left as it was, and its message waits for the screen.
+	 *
+	 * `required` used to be an HTML attribute and nothing more: a crafted
+	 * request walked past it and the stored value was deleted. The set now
+	 * refuses it, and this class's part is to carry the message across the
+	 * redirect core makes before anything here could draw it — under this
+	 * user, this post and this box, for a minute.
+	 */
+	public function test_a_refused_value_is_kept_and_its_message_stored(): void {
+		$GLOBALS['fk_meta']['post'][7] = [ 'colour' => 'blue' ];
+
+		$this->submit(
+			[
+				'colour'  => '',
+				'contact' => 'not-an-address',
+			]
+		);
+
+		$this->validated()->save( 7, $this->post() );
+
+		$this->assertSame( 'blue', $GLOBALS['fk_meta']['post'][7]['colour'] );
+		$this->assertArrayNotHasKey( 'contact', $GLOBALS['fk_meta']['post'][7] );
+
+		$stored = array_values( $GLOBALS['rf_transients'] );
+
+		$this->assertCount( 1, $stored );
+		$this->assertSame(
+			[
+				'colour'  => 'Colour is required.',
+				'contact' => 'Contact must be an email address.',
+			],
+			$stored[0]['value']
+		);
+		$this->assertSame( MINUTE_IN_SECONDS, $stored[0]['expiration'] );
+	}
+
+	/**
+	 * The next render shows the notice and marks the field, once.
+	 */
+	public function test_the_next_render_shows_the_messages_once(): void {
+		$metabox = $this->validated();
+
+		$this->submit( [ 'colour' => '' ] );
+		$metabox->save( 7, $this->post() );
+
+		$html = $this->render( $metabox );
+
+		// Once in the notice at the top of the box, once under the field.
+		$this->assertStringContainsString( 'notice notice-error', $html );
+		$this->assertSame( 2, substr_count( $html, 'Colour is required.' ) );
+		$this->assertStringContainsString( 'field-kit__error', $html );
+		$this->assertStringContainsString( 'aria-invalid="true"', $html );
+
+		// The notice sits before the fields, not after them.
+		$this->assertLessThan( strpos( $html, '<table' ), strpos( $html, 'notice-error' ) );
+
+		// Read once: a refresh shows the form as stored, which is what passed.
+		$this->assertSame( [], $GLOBALS['rf_transients'] );
+		$this->assertStringNotContainsString( 'notice-error', $this->render( $metabox ) );
+	}
+
+	/**
+	 * Another user opening the same post is not told their form is wrong.
+	 */
+	public function test_the_messages_are_for_the_user_who_saved(): void {
+		$metabox = $this->validated();
+
+		$this->submit( [ 'colour' => '' ] );
+		$metabox->save( 7, $this->post() );
+
+		$GLOBALS['uf_current_user'] = 2;
+
+		try {
+			$this->assertStringNotContainsString( 'notice-error', $this->render( $metabox ) );
+		} finally {
+			$GLOBALS['uf_current_user'] = 1;
+		}
+
+		// Still waiting for the person who saved.
+		$this->assertStringContainsString( 'notice-error', $this->render( $metabox ) );
+	}
+
+	/**
+	 * A save that refuses nothing leaves nothing waiting.
+	 */
+	public function test_a_clean_save_leaves_no_transient(): void {
+		$metabox = $this->validated();
+
+		$this->submit( [ 'colour' => '' ] );
+		$metabox->save( 7, $this->post() );
+
+		$this->assertCount( 1, $GLOBALS['rf_transients'] );
+
+		// Corrected and saved again without the screen having been redrawn
+		// in between — which is what the block editor does.
+		$this->submit( [ 'colour' => 'red' ] );
+		$metabox->save( 7, $this->post() );
+
+		$this->assertSame( 'red', $GLOBALS['fk_meta']['post'][7]['colour'] );
+		$this->assertSame( [], $GLOBALS['rf_transients'] );
+		$this->assertStringNotContainsString( 'notice-error', $this->render( $metabox ) );
+	}
+
 }

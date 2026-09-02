@@ -488,4 +488,41 @@ final class TermFieldsTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'field-kit', $GLOBALS['fk_styles'] ?? [] );
 	}
+
+	/**
+	 * A refused value is kept, and the edit screen says so on the next load.
+	 *
+	 * The edit form's rows go into a table core opened, so the notice needs
+	 * a row of its own — the same shape the nonce gets, for the same reason.
+	 */
+	public function test_a_refused_value_is_kept_and_reported_on_the_edit_screen(): void {
+		$GLOBALS['fk_meta']['term'][5] = [ 'colour' => 'blue' ];
+
+		$fields = $this->fields(
+			[
+				'colour' => [
+					'type'     => 'text',
+					'label'    => 'Colour',
+					'required' => true,
+				],
+			]
+		);
+
+		$this->submit( [ 'colour' => '' ] );
+		$fields->save( 5 );
+
+		$this->assertSame( 'blue', $GLOBALS['fk_meta']['term'][5]['colour'] );
+		$this->assertCount( 1, $GLOBALS['rf_transients'] );
+
+		$html = $this->edit( $fields );
+
+		$this->assertStringContainsString( '<td colspan="2"><div class="notice notice-error inline">', $html );
+		$this->assertSame( 2, substr_count( $html, 'Colour is required.' ) );
+		$this->assertStringContainsString( 'aria-invalid="true"', $html );
+
+		// Read once.
+		$this->assertSame( [], $GLOBALS['rf_transients'] );
+		$this->assertStringNotContainsString( 'notice-error', $this->edit( $fields ) );
+	}
+
 }

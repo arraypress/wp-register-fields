@@ -281,12 +281,19 @@ class PostFields {
 	public function render( WP_Post $post ): void {
 		wp_nonce_field( 'save_' . $this->id, $this->id . '_nonce' );
 
+		// What the last save of this post refused, if this user made it and
+		// the screen has not shown it yet. Read here, once, so the notice
+		// and the field markers agree.
+		$errors = Errors::recall( 'post', $post->ID, $this->id );
+
 		printf( '<div class="field-kit__metabox" data-metabox-id="%s">', esc_attr( $this->id ) );
 
+		echo Errors::notice( $errors ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+
 		if ( [] !== (array) $this->config['panels'] ) {
-			echo $this->render_panels( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+			echo $this->render_panels( $post, $errors ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 		} else {
-			echo $this->render_sections( $this->visible_fields( $post->ID ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+			echo $this->render_sections( $this->visible_fields( $post->ID ), $errors ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 		}
 
 		echo '</div>';
@@ -299,11 +306,12 @@ class PostFields {
 	 * is dropped rather than shown empty. A tab that opens onto nothing reads
 	 * as a screen that failed to load.
 	 *
-	 * @param WP_Post $post The post being edited.
+	 * @param WP_Post               $post   The post being edited.
+	 * @param array<string, string> $errors Messages from the last save, keyed by field.
 	 *
 	 * @return string
 	 */
-	private function render_panels( WP_Post $post ): string {
+	private function render_panels( WP_Post $post, array $errors ): string {
 		$visible = [];
 
 		foreach ( $this->visible_fields( $post->ID ) as $field ) {
@@ -328,7 +336,7 @@ class PostFields {
 			// draws none.
 			$panels[ (string) $slug ] = [
 				'label'   => (string) ( $panel['label'] ?? $slug ),
-				'content' => $this->render_table( array_values( $in_panel ) ),
+				'content' => $this->render_table( array_values( $in_panel ), $errors ),
 			];
 		}
 
@@ -347,20 +355,21 @@ class PostFields {
 	 * Without this the markers arrived here as ordinary fields, rendered
 	 * nothing, and a tabbed metabox came out as one flat list.
 	 *
-	 * @param Field[] $fields The fields.
+	 * @param Field[]               $fields The fields.
+	 * @param array<string, string> $errors Messages from the last save, keyed by field.
 	 *
 	 * @return string
 	 */
-	private function render_sections( array $fields ): string {
+	private function render_sections( array $fields, array $errors ): string {
 		$layout = Sections::split( $fields );
 
 		if ( [] === $layout ) {
-			return $this->render_table( $fields );
+			return $this->render_table( $fields, $errors );
 		}
 
 		return Sections::render(
 			$layout,
-			fn( array $group ): string => [] === $group ? '' : $this->render_table( $group ),
+			fn( array $group ): string => [] === $group ? '' : $this->render_table( $group, $errors ),
 			$this->id
 		);
 	}
@@ -370,11 +379,12 @@ class PostFields {
 	 *
 	 * A marker draws nothing, so one left in the list emits an empty row.
 	 *
-	 * @param Field[] $fields The fields.
+	 * @param Field[]               $fields The fields.
+	 * @param array<string, string> $errors Messages from the last save, keyed by field.
 	 *
 	 * @return string
 	 */
-	private function render_table( array $fields ): string {
+	private function render_table( array $fields, array $errors ): string {
 		ob_start();
 
 		echo '<table class="form-table" role="presentation"><tbody>';
@@ -384,7 +394,7 @@ class PostFields {
 				continue;
 			}
 
-			$this->render_row( $field );
+			$this->render_row( $field, $errors );
 		}
 
 		echo '</tbody></table>';
@@ -395,11 +405,12 @@ class PostFields {
 	/**
 	 * Render one field as a table row.
 	 *
-	 * @param Field $field The field.
+	 * @param Field                 $field  The field.
+	 * @param array<string, string> $errors Messages from the last save, keyed by field.
 	 *
 	 * @return void
 	 */
-	private function render_row( Field $field ): void {
+	private function render_row( Field $field, array $errors ): void {
 		$type = $field->type();
 
 		// A heading, a notice or a panel has no label to sit beside: a header
@@ -437,7 +448,7 @@ class PostFields {
 		printf(
 			'<tr class="field-kit__metabox-row"><th scope="row">%s</th><td>%s</td></tr>',
 			$header, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_html/esc_attr above.
-			$this->set->render_field( $field, '', false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
+			$this->set->render_field( $field, $errors[ $field->key() ] ?? '', false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
 		);
 	}
 
@@ -479,7 +490,14 @@ class PostFields {
 
 		// Only what this user may set. A field they cannot see is not one a
 		// crafted submission gets to write either.
-		$this->permitted_set( $post_id )->save( $input, $post_id );
+		$set = $this->permitted_set( $post_id );
+
+		$set->save( $input, $post_id );
+
+		// A refused value is left as it was and the rest are stored. Core
+		// redirects before anything here could say so, so the messages wait
+		// for the next load of this post's screen.
+		Errors::remember( 'post', $post_id, $this->id, $set->errors() );
 	}
 
 	/**

@@ -192,6 +192,9 @@ class TermFields {
 	public function render_add_form(): void {
 		wp_nonce_field( 'save_' . $this->id, $this->id . '_nonce' );
 
+		// No messages here. The add form posts over AJAX and is never
+		// reloaded, and a refused value belongs to the term that was just
+		// created — its edit screen is where the message is read.
 		$fields = $this->visible_fields();
 		$layout = Sections::split( $fields );
 
@@ -235,6 +238,18 @@ class TermFields {
 		wp_nonce_field( 'save_' . $this->id, $this->id . '_nonce' );
 		echo '</td></tr>';
 
+		// What the last save of this term refused, if this user made it and
+		// the screen has not shown it yet. In a row of its own, for the same
+		// reason the nonce is: these rows go into a table core opened.
+		$errors = Errors::recall( 'term', $term->term_id, $this->id );
+
+		if ( [] !== $errors ) {
+			printf(
+				'<tr class="form-field field-kit__spans-row"><td colspan="2">%s</td></tr>',
+				Errors::notice( $errors ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+			);
+		}
+
 		$fields = $this->visible_fields( $term->term_id );
 		$layout = Sections::split( $fields );
 
@@ -249,7 +264,7 @@ class TermFields {
 			 */
 			$sections = Sections::render(
 				$layout,
-				fn( array $group ): string => [] === $group ? '' : $this->render_edit_table( $group ),
+				fn( array $group ): string => [] === $group ? '' : $this->render_edit_table( $group, $errors ),
 				$this->id
 			);
 
@@ -261,21 +276,22 @@ class TermFields {
 			return;
 		}
 
-		$this->render_edit_rows( $fields );
+		$this->render_edit_rows( $fields, $errors );
 	}
 
 	/**
 	 * One section's fields, as a table of their own.
 	 *
 	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 * @param array<string, string>        $errors Messages from the last save, keyed by field.
 	 *
 	 * @return string
 	 */
-	private function render_edit_table( array $fields ): string {
+	private function render_edit_table( array $fields, array $errors ): string {
 		ob_start();
 
 		echo '<table class="form-table" role="presentation"><tbody>';
-		$this->render_edit_rows( $fields );
+		$this->render_edit_rows( $fields, $errors );
 		echo '</tbody></table>';
 
 		return (string) ob_get_clean();
@@ -285,10 +301,11 @@ class TermFields {
 	 * The fields as table rows.
 	 *
 	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 * @param array<string, string>        $errors Messages from the last save, keyed by field.
 	 *
 	 * @return void
 	 */
-	private function render_edit_rows( array $fields ): void {
+	private function render_edit_rows( array $fields, array $errors ): void {
 		foreach ( $fields as $field ) {
 			// A marker draws nothing, so one left in emits an empty row.
 			if ( Sections::is_marker( $field ) ) {
@@ -347,7 +364,7 @@ class TermFields {
 				// text beside the box, and a group keeps its legend but
 				// hidden, so the grouping is still announced without the
 				// heading appearing twice.
-				$this->set->render_field( $field, '', false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
+				$this->set->render_field( $field, $errors[ $field->key() ] ?? '', false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
 			);
 		}
 	}
@@ -384,9 +401,16 @@ class TermFields {
 		// crafted submission gets to write either — the screen hides it, and
 		// without this the hiding would be the only thing stopping it.
 		$allowed = $this->permitted_fields( $term_id );
+		$set     = $this->permitted_set( $allowed );
 
-		$this->permitted_set( $allowed )->save( $input, $term_id );
+		$set->save( $input, $term_id );
 		$this->save_amount_units( $term_id, $input, $allowed );
+
+		// A refused value is left as it was and the rest are stored. Core
+		// redirects before anything here could say so, so the messages wait
+		// for the next load of this term's edit screen — which is also where
+		// they go for a term the add form just created over AJAX.
+		Errors::remember( 'term', $term_id, $this->id, $set->errors() );
 	}
 
 	/**

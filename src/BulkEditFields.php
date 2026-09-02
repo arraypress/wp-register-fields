@@ -345,6 +345,10 @@ class BulkEditFields {
 		// forty selected posts is the worst thing this library could do.
 		$changing = array_intersect_key( $this->fields, $input );
 
+		// A value that fails validation is skipped on each post — kept as it
+		// was, with the rest stored — and nothing says so. The list table
+		// redraws with forty results and no place to report which post
+		// refused what, and a notice per post would be forty notices.
 		( new FieldSet( $changing, new PostMetaContext(), '', new Registry() ) )->save( $input, $post_id );
 	}
 

@@ -190,9 +190,14 @@ class UserFields {
 			return;
 		}
 
+		// What the last save of this profile refused, if this user made it
+		// and the screen has not shown it yet.
+		$errors = Errors::recall( 'user', $user->ID, $this->id );
+
 		printf( '<h2>%s</h2>', esc_html( $this->section_title ) );
 
-		echo $this->render_sections( $fields ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+		echo Errors::notice( $errors ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+		echo $this->render_sections( $fields, $errors ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 	}
 
 	/**
@@ -217,7 +222,11 @@ class UserFields {
 
 		printf( '<h2>%s</h2>', esc_html( $this->section_title ) );
 
-		echo $this->render_sections( $fields ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
+		// No messages here: there is no user yet to have refused anything
+		// for, and once there is, core sends the person to the list rather
+		// than back to this form. A refused value waits for the new user's
+		// profile screen.
+		echo $this->render_sections( $fields, [] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 	}
 
 	/**
@@ -227,19 +236,20 @@ class UserFields {
 	 * drew nothing, and a set meant to be tabbed came out as one flat list.
 	 *
 	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 * @param array<string, string>        $errors Messages from the last save, keyed by field.
 	 *
 	 * @return string
 	 */
-	private function render_sections( array $fields ): string {
+	private function render_sections( array $fields, array $errors ): string {
 		$layout = Sections::split( $fields );
 
 		if ( [] === $layout ) {
-			return $this->render_table( $fields );
+			return $this->render_table( $fields, $errors );
 		}
 
 		return Sections::render(
 			$layout,
-			fn( array $group ): string => [] === $group ? '' : $this->render_table( $group ),
+			fn( array $group ): string => [] === $group ? '' : $this->render_table( $group, $errors ),
 			$this->id
 		);
 	}
@@ -250,10 +260,11 @@ class UserFields {
 	 * A marker draws nothing, so one left in the list emits an empty row.
 	 *
 	 * @param \ArrayPress\FieldKit\Field[] $fields The fields.
+	 * @param array<string, string>        $errors Messages from the last save, keyed by field.
 	 *
 	 * @return string
 	 */
-	private function render_table( array $fields ): string {
+	private function render_table( array $fields, array $errors ): string {
 		ob_start();
 
 		echo '<table class="form-table" role="presentation"><tbody>';
@@ -263,7 +274,7 @@ class UserFields {
 				continue;
 			}
 
-			$this->render_row( $field );
+			$this->render_row( $field, $errors );
 		}
 
 		echo '</tbody></table>';
@@ -274,11 +285,12 @@ class UserFields {
 	/**
 	 * Render one field as a table row.
 	 *
-	 * @param \ArrayPress\FieldKit\Field $field The field.
+	 * @param \ArrayPress\FieldKit\Field $field  The field.
+	 * @param array<string, string>      $errors Messages from the last save, keyed by field.
 	 *
 	 * @return void
 	 */
-	private function render_row( $field ): void {
+	private function render_row( $field, array $errors ): void {
 		$type = $field->type();
 
 		// A heading, a notice or a panel has no label to sit beside: a header
@@ -320,7 +332,7 @@ class UserFields {
 			$header, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_html/esc_attr above.
 			// The header cell is the visible heading on this screen, so the
 			// kit draws none.
-			$this->set->render_field( $field, '', false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
+			$this->set->render_field( $field, $errors[ $field->key() ] ?? '', false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
 		);
 	}
 
@@ -342,7 +354,14 @@ class UserFields {
 		// Only what this user may set. A field they cannot see is not one a
 		// crafted submission gets to write either — the screen hides it, and
 		// without this the hiding would be the only thing stopping it.
-		$this->restricted( $user_id )->save( $input, $user_id );
+		$set = $this->restricted( $user_id );
+
+		$set->save( $input, $user_id );
+
+		// A refused value is left as it was and the rest are stored. Core
+		// redirects before anything here could say so, so the messages wait
+		// for the next load of this user's profile.
+		Errors::remember( 'user', $user_id, $this->id, $set->errors() );
 	}
 
 	/**

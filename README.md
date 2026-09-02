@@ -25,6 +25,7 @@ behaves the same wherever it appears.
 - Repeatable groups of fields, reorderable by dragging
 - Searchable dropdowns for posts, terms and users that load over AJAX
 - Hide fields from users who lack a capability, on render *and* on save
+- Refuse a value that is missing or malformed on save, and say which field
 - Bulk edit understands "no change", so an empty field does not wipe a value
 - Read values back with helpers that apply the same prefixing rules
 
@@ -73,6 +74,17 @@ $colour = get_term_field_value( $term_id, 'colour' );
 $phone  = get_user_field_value( $user_id, 'phone' );
 $fields = get_term_fields( 'category' ); // The registered set, for get_value() and friends.
 ```
+
+## Validation
+
+Mark a field `'required' => true`, or give it a `validate` rule — `email`,
+`url`, `numeric`, `integer`, `slug`, `alphanumeric`, or a callable returning
+`true`, a message or a `WP_Error` — and it is checked on the server when the
+form saves. A value that fails is not stored: the field keeps what it held and
+the rest of the form saves. When the post, term or profile screen reloads, an
+error notice at the top of the metabox or section lists the messages, and each
+failing field shows its own beneath the control. Quick edit and bulk edit skip
+a failing field without a notice, since neither reloads a screen to show one.
 
 ## Documentation
 

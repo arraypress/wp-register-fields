@@ -297,6 +297,12 @@ class QuickEditFields {
 		// Only what this user may set. The callback filtered what was drawn
 		// and nothing else, so anyone who knew a hidden field's key could
 		// post it.
+		//
+		// A value that fails validation is skipped by the set — kept as it
+		// was, with the rest stored — and that is all that happens to it.
+		// Quick edit is answered over AJAX with the redrawn row, so there is
+		// no screen load to carry a notice to; the row shows the value that
+		// stayed.
 		$this->permitted_set()->save( $input, $post_id );
 	}
 

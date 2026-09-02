@@ -97,6 +97,9 @@ function pf_reset_globals(): void {
 
 	// Whether wp_verify_nonce() should accept what it is given.
 	$GLOBALS['pf_nonce_ok'] = true;
+
+	// What a save left for the next screen.
+	$GLOBALS['rf_transients'] = [];
 }
 
 pf_reset_globals();
@@ -193,6 +196,9 @@ function tf_reset_globals(): void {
 		'base'     => 'edit-tags',
 	];
 	$GLOBALS['tf_denied']        = [];
+
+	// What a save left for the next screen.
+	$GLOBALS['rf_transients'] = [];
 }
 
 tf_reset_globals();
@@ -267,6 +273,9 @@ function uf_reset_globals(): void {
 	// Capability => whether the current user has it. Anything unlisted is
 	// granted, so a test only says what it is actually about.
 	$GLOBALS['uf_denied'] = [];
+
+	// What a save left for the next screen.
+	$GLOBALS['rf_transients'] = [];
 }
 
 uf_reset_globals();
@@ -515,3 +524,40 @@ if ( ! function_exists( 'sanitize_text_field' ) ) {
 /**
  * The parts of WP_Post a metabox touches.
  */
+
+
+/* ---- shared: what a save leaves for the next screen ---- */
+
+/*
+ * The three screens that save through a page load carry a refused value's
+ * message across the redirect in a transient. Stored with its expiry so a
+ * test can say how long it waits, not only that it does.
+ */
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
+	define( 'MINUTE_IN_SECONDS', 60 );
+}
+
+if ( ! function_exists( 'set_transient' ) ) {
+	function set_transient( $key, $value, $expiration = 0 ) {
+		$GLOBALS['rf_transients'][ $key ] = [
+			'value'      => $value,
+			'expiration' => (int) $expiration,
+		];
+
+		return true;
+	}
+}
+
+if ( ! function_exists( 'get_transient' ) ) {
+	function get_transient( $key ) {
+		return $GLOBALS['rf_transients'][ $key ]['value'] ?? false;
+	}
+}
+
+if ( ! function_exists( 'delete_transient' ) ) {
+	function delete_transient( $key ) {
+		unset( $GLOBALS['rf_transients'][ $key ] );
+
+		return true;
+	}
+}

@@ -465,4 +465,38 @@ final class UserFieldsTest extends TestCase {
 		$this->assertSame( 'sk-restricted', $fields->get_value( 7, 'api_key' ) );
 	}
 
+	/**
+	 * A refused value is kept, and the profile says so on the next load.
+	 */
+	public function test_a_refused_value_is_kept_and_reported_on_the_profile(): void {
+		$GLOBALS['fk_meta']['user'][1] = [ 'department' => 'Sales' ];
+
+		$fields = $this->fields(
+			[
+				'department' => [
+					'type'     => 'text',
+					'label'    => 'Department',
+					'required' => true,
+				],
+			]
+		);
+
+		$_POST = [ 'department' => '' ];
+		$fields->save( 1 );
+
+		$this->assertSame( 'Sales', $GLOBALS['fk_meta']['user'][1]['department'] );
+		$this->assertCount( 1, $GLOBALS['rf_transients'] );
+
+		$html = $this->render( $fields );
+
+		// After the heading, before the fields.
+		$this->assertStringContainsString( '</h2><div class="notice notice-error inline">', $html );
+		$this->assertSame( 2, substr_count( $html, 'Department is required.' ) );
+		$this->assertStringContainsString( 'aria-invalid="true"', $html );
+
+		// Read once.
+		$this->assertSame( [], $GLOBALS['rf_transients'] );
+		$this->assertStringNotContainsString( 'notice-error', $this->render( $fields ) );
+	}
+
 }
