@@ -62,5 +62,11 @@
     "metabox",
     "meta",
     "arraypress"
+  ],
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/arraypress/wp-field-kit.git"
+    }
   ]
 }

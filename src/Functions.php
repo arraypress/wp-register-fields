@@ -32,8 +32,10 @@ if ( ! function_exists( 'register_post_fields' ) ) {
 	 * Register custom fields for posts via a metabox.
 	 *
 	 * This function provides a simple API for adding custom fields to post edit
-	 * screens. Fields are automatically saved to post meta with proper sanitization
-	 * and REST API integration.
+	 * screens. Fields are saved to post meta, each sanitized by its own type.
+	 * Nothing is exposed to the REST API unless a field sets `show_in_rest`:
+	 * the default is off, so a licence key is not published to the block
+	 * editor for having been registered.
 	 *
 	 * Supported field types:
 	 * - text: Single line text input
@@ -215,15 +217,9 @@ if ( ! function_exists( 'register_term_fields' ) ) {
 	 * This function provides a simple API for adding custom fields to taxonomy
 	 * term add/edit screens. Fields are automatically saved to term meta.
 	 *
-	 * Supported field types:
-	 * - text: Single line text input
-	 * - textarea: Multi-line text input
-	 * - number: Numeric input with optional min/max/step
-	 * - select: Dropdown with options
-	 * - checkbox: Boolean checkbox
-	 * - url: URL input with validation
-	 * - email: Email input with validation
-	 * - amount_type: Combined numeric input with type selector (e.g., 10 + %)
+	 * Every field type wp-field-kit provides is supported here, on both the
+	 * add and edit screens — the same types a post metabox takes, including
+	 * amount_type, which writes its unit to a companion meta key.
 	 *
 	 * @param string|array $taxonomies Taxonomy or array of taxonomies to register fields for.
 	 * @param array        $fields     Array of field configurations keyed by meta key.

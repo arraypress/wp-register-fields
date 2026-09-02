@@ -296,14 +296,32 @@ class BulkEditFields {
 	/**
 	 * Save the bulk edit.
 	 *
+	 * Core checks the list table's nonce before it runs a bulk edit, but
+	 * save_post fires for every save there is, and `bulk_edit` in a request
+	 * is a word anyone can type. Checking the same nonce here is what says
+	 * core did the checking.
+	 *
+	 * The request is read through $_REQUEST rather than $_POST because the
+	 * list table's form is method="get": a bulk edit arrives as a query
+	 * string, which is why core hands $_REQUEST to bulk_edit_posts() itself.
+	 * WordPress rebuilds $_REQUEST as $_GET and $_POST with no cookies in
+	 * it, so nothing else gets in that way.
+	 *
 	 * @param int      $post_id The post id.
 	 * @param \WP_Post $post    The post.
 	 *
 	 * @return void
 	 */
 	public function save( int $post_id, $post ): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- core verifies the bulk edit nonce before firing save_post.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- checked below.
 		if ( ! isset( $_REQUEST['bulk_edit'] ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- checked on the next line.
+		$nonce = isset( $_REQUEST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ) : '';
+
+		if ( '' === $nonce || ! wp_verify_nonce( $nonce, 'bulk-posts' ) ) {
 			return;
 		}
 
@@ -315,7 +333,7 @@ class BulkEditFields {
 			return;
 		}
 
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- as above.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- verified above.
 		$input = $this->changed( $_REQUEST );
 
 		if ( [] === $input ) {

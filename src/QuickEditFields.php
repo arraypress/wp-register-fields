@@ -14,6 +14,7 @@ namespace ArrayPress\RegisterFields;
 
 use ArrayPress\FieldKit\Assets;
 use ArrayPress\FieldKit\Context\PostMetaContext;
+use ArrayPress\FieldKit\Contracts\Context;
 use ArrayPress\FieldKit\Field;
 use ArrayPress\FieldKit\FieldSet;
 use ArrayPress\FieldKit\Registry;
@@ -39,6 +40,16 @@ class QuickEditFields {
 	 * @var string
 	 */
 	private const COLUMN = 'field-kit-inline';
+
+	/**
+	 * Where values are read from and written to.
+	 *
+	 * Built once and shared by every field set this class makes, so the one
+	 * built for a permission-restricted save behaves exactly as the full one.
+	 *
+	 * @var Context
+	 */
+	private Context $context;
 
 	/**
 	 * The post type these fields belong to.
@@ -92,7 +103,8 @@ class QuickEditFields {
 
 		$this->post_type = $post_type;
 		$this->fields    = $this->inline_only( $fields );
-		$this->set       = new FieldSet( $this->fields, new PostMetaContext(), '', new Registry() );
+		$this->context   = new PostMetaContext();
+		$this->set       = new FieldSet( $this->fields, $this->context, '', new Registry() );
 
 		self::$instances[ $post_type ] = $this;
 
@@ -280,7 +292,37 @@ class QuickEditFields {
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
-		$this->set->save( $_POST, $post_id );
+		$input = $_POST;
+
+		// Only what this user may set. The callback filtered what was drawn
+		// and nothing else, so anyone who knew a hidden field's key could
+		// post it.
+		$this->permitted_set()->save( $input, $post_id );
+	}
+
+	/**
+	 * A field set limited to what the current user may write.
+	 *
+	 * Decided by the same callback the panel is drawn with, so "may they see
+	 * it" and "may they set it" cannot drift apart. The full set is reused
+	 * when nothing was withheld.
+	 *
+	 * @return FieldSet
+	 */
+	private function permitted_set(): FieldSet {
+		$keys = [];
+
+		foreach ( $this->set->fields() as $field ) {
+			if ( $this->permitted( $field ) ) {
+				$keys[] = $field->key();
+			}
+		}
+
+		$allowed = array_intersect_key( $this->fields, array_flip( $keys ) );
+
+		return $allowed === $this->fields
+			? $this->set
+			: new FieldSet( $allowed, $this->context, '', new Registry() );
 	}
 
 	/**

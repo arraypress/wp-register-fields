@@ -55,6 +55,17 @@ class TermFields {
 	private string $taxonomy;
 
 	/**
+	 * This field set's identifier.
+	 *
+	 * Derived from the taxonomy, so the nonce that guards the save and the
+	 * scope that keeps one taxonomy's tab strip from driving another's panels
+	 * are both unique to it.
+	 *
+	 * @var string
+	 */
+	private string $id;
+
+	/**
 	 * Field configuration, keyed by meta key.
 	 *
 	 * @var array<string, array<string, mixed>>
@@ -91,6 +102,7 @@ class TermFields {
 		}
 
 		$this->taxonomy = $taxonomy;
+		$this->id       = 'term-' . $taxonomy;
 		$this->fields   = $fields;
 		// One context, shared by every field set this class builds. The
 		// encrypting decorator is what makes `encrypted` mean anything:
@@ -178,6 +190,8 @@ class TermFields {
 	 * @return void
 	 */
 	public function render_add_form(): void {
+		wp_nonce_field( 'save_' . $this->id, $this->id . '_nonce' );
+
 		$fields = $this->visible_fields();
 		$layout = Sections::split( $fields );
 
@@ -215,6 +229,12 @@ class TermFields {
 	 * @return void
 	 */
 	public function render_edit_form( WP_Term $term, string $taxonomy ): void {
+		// Inside the table core opened, so the nonce gets a row of its own
+		// rather than sitting loose between two.
+		echo '<tr class="hidden"><td colspan="2">';
+		wp_nonce_field( 'save_' . $this->id, $this->id . '_nonce' );
+		echo '</td></tr>';
+
 		$fields = $this->visible_fields( $term->term_id );
 		$layout = Sections::split( $fields );
 
@@ -335,16 +355,74 @@ class TermFields {
 	/**
 	 * Save a term's fields.
 	 *
+	 * Hooked to created_ and edited_, which fire for every write to a term
+	 * there is — Quick Edit on the list table, a term-order plugin, a plain
+	 * wp_update_term() from anywhere — and none of those carry these fields.
+	 * The set reads an absent field as cleared, so without a nonce of this
+	 * form's own, any of them would wipe every value the term had.
+	 *
 	 * @param int $term_id The term id.
 	 *
 	 * @return void
 	 */
 	public function save( int $term_id ): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- core verifies the term form's nonce before firing created_/edited_.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked on the next line.
+		$nonce = isset( $_POST[ $this->id . '_nonce' ] ) ? sanitize_text_field( wp_unslash( $_POST[ $this->id . '_nonce' ] ) ) : '';
+
+		if ( '' === $nonce || ! wp_verify_nonce( $nonce, 'save_' . $this->id ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'edit_term', $term_id ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
 		$input = $_POST;
 
-		$this->set->save( $input, $term_id );
-		$this->save_amount_units( $term_id, $input );
+		// Only what this user may set. A field they cannot see is not one a
+		// crafted submission gets to write either — the screen hides it, and
+		// without this the hiding would be the only thing stopping it.
+		$allowed = $this->permitted_fields( $term_id );
+
+		$this->permitted_set( $allowed )->save( $input, $term_id );
+		$this->save_amount_units( $term_id, $input, $allowed );
+	}
+
+	/**
+	 * The field configuration limited to what the current user may write.
+	 *
+	 * Decided by the same callback the screens draw with, so "may they see
+	 * it" and "may they set it" cannot drift apart.
+	 *
+	 * @param int $term_id The term being saved.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function permitted_fields( int $term_id ): array {
+		$keys = array_map(
+			static fn( Field $field ): string => $field->key(),
+			$this->visible_fields( $term_id )
+		);
+
+		return array_intersect_key( $this->fields, array_flip( $keys ) );
+	}
+
+	/**
+	 * A field set limited to the given fields.
+	 *
+	 * The full set is reused when nothing was withheld. A narrower one is
+	 * built on the same context, because the encrypting decorator lives
+	 * there and a set without it writes an encrypted field in the clear.
+	 *
+	 * @param array<string, array<string, mixed>> $allowed Field configuration.
+	 *
+	 * @return FieldSet
+	 */
+	private function permitted_set( array $allowed ): FieldSet {
+		return $allowed === $this->fields
+			? $this->set
+			: new FieldSet( $allowed, $this->context, '', new Registry() );
 	}
 
 	/**
@@ -354,13 +432,14 @@ class TermFields {
 	 * query and sort on the unit independently. The field set writes the
 	 * amount; only this context knows where the unit goes.
 	 *
-	 * @param int                  $term_id The term id.
-	 * @param array<string, mixed> $input   Raw submission.
+	 * @param int                                 $term_id The term id.
+	 * @param array<string, mixed>                $input   Raw submission.
+	 * @param array<string, array<string, mixed>> $fields  The fields this user may write.
 	 *
 	 * @return void
 	 */
-	private function save_amount_units( int $term_id, array $input ): void {
-		foreach ( $this->fields as $key => $config ) {
+	private function save_amount_units( int $term_id, array $input, array $fields ): void {
+		foreach ( $fields as $key => $config ) {
 			if ( 'amount_type' !== ( $config['type'] ?? '' ) ) {
 				continue;
 			}

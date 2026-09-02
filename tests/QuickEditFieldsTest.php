@@ -221,6 +221,33 @@ final class QuickEditFieldsTest extends TestCase {
 	}
 
 	/**
+	 * A field the user cannot see cannot be written by a crafted submission.
+	 *
+	 * The callback filtered what was drawn and nothing else: save() wrote the
+	 * whole set, so anyone who knew the key could post it.
+	 */
+	public function test_a_hidden_field_cannot_be_written(): void {
+		$_POST = [
+			'field_kit_quick_edit_post' => 'nonce',
+			'colour'                    => 'blue',
+			'secret'                    => 'sneaked in',
+		];
+
+		$this->fields(
+			[
+				'colour' => [ 'type' => 'text' ],
+				'secret' => [
+					'type'                => 'text',
+					'permission_callback' => static fn( $field ): bool => false,
+				],
+			]
+		)->save( 7 );
+
+		$this->assertSame( 'blue', $GLOBALS['fk_meta']['post'][7]['colour'] );
+		$this->assertArrayNotHasKey( 'secret', $GLOBALS['fk_meta']['post'][7] );
+	}
+
+	/**
 	 * Fields can be read back by post type.
 	 */
 	public function test_fields_can_be_read_back_by_post_type(): void {

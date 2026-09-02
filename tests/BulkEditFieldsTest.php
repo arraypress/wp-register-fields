@@ -78,7 +78,13 @@ final class BulkEditFieldsTest extends TestCase {
 	 * @return void
 	 */
 	private function submit( array $values ): void {
-		$_REQUEST = array_merge( [ 'bulk_edit' => 'Update' ], $values );
+		$_REQUEST = array_merge(
+			[
+				'bulk_edit' => 'Update',
+				'_wpnonce'  => 'nonce-bulk-posts',
+			],
+			$values
+		);
 	}
 
 	/**
@@ -316,6 +322,25 @@ final class BulkEditFieldsTest extends TestCase {
 		$this->fields()->save( 7, $this->post() );
 
 		$this->assertArrayNotHasKey( 7, $GLOBALS['fk_meta']['post'] ?? [] );
+	}
+
+	/**
+	 * A bulk edit without core's nonce writes nothing.
+	 *
+	 * `bulk_edit` in a request is a word anyone can type. The nonce is what
+	 * says core checked the submission before firing save_post.
+	 */
+	public function test_a_bulk_edit_without_the_nonce_writes_nothing(): void {
+		$GLOBALS['fk_meta']['post'][7] = [ 'colour' => 'blue' ];
+
+		$_REQUEST = [
+			'bulk_edit' => 'Update',
+			'colour'    => 'red',
+		];
+
+		$this->fields()->save( 7, $this->post() );
+
+		$this->assertSame( 'blue', $GLOBALS['fk_meta']['post'][7]['colour'] );
 	}
 
 	/**
