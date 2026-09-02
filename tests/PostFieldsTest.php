@@ -287,12 +287,13 @@ final class PostFieldsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 2, substr_count( $html, '<details' ) );
-		$this->assertStringContainsString( '>Delivery</summary>', $html );
-		$this->assertStringContainsString( '>Billing</summary>', $html );
+		$this->assertSame( 2, substr_count( $html, 'privacy-settings-accordion-trigger' ) );
+		$this->assertStringContainsString( '<span class="title">Delivery</span>', $html );
+		$this->assertStringContainsString( '<span class="title">Billing</span>', $html );
 
 		// The first is open and the second said not to be.
-		$this->assertSame( 1, substr_count( $html, '<details class="field-kit__accordion" open>' ) );
+		$this->assertSame( 1, substr_count( $html, 'aria-expanded="true"' ) );
+		$this->assertSame( 1, substr_count( $html, 'aria-expanded="false"' ) );
 	}
 
 	/**
