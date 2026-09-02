@@ -14,12 +14,13 @@ namespace ArrayPress\RegisterFields;
 
 use ArrayPress\FieldKit\Assets;
 use ArrayPress\FieldKit\Context\EncryptedContext;
-use ArrayPress\FieldKit\Contracts\Context;
 use ArrayPress\FieldKit\Context\UserMetaContext;
+use ArrayPress\FieldKit\Contracts\Context;
 use ArrayPress\FieldKit\Field;
 use ArrayPress\FieldKit\FieldSet;
 use ArrayPress\FieldKit\Registry;
 use ArrayPress\FieldKit\Support\Badge;
+use ArrayPress\FieldKit\Support\Markup;
 use ArrayPress\FieldKit\Support\Sections;
 use ArrayPress\FieldKit\Support\Tooltip;
 use WP_User;
@@ -320,9 +321,10 @@ class UserFields {
 				$badge . $tooltip // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 			)
 			: sprintf(
-				'<label for="%s">%s</label>%s',
+				'<label for="%s">%s%s</label>%s',
 				esc_attr( $field->input_id() ),
 				esc_html( $field->label() ),
+				Markup::required_marker( $field->is_required() ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the kit escapes as it builds.
 				$badge . $tooltip // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped as it is built.
 			);
 

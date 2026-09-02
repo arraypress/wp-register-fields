@@ -796,4 +796,26 @@ final class PostFieldsTest extends TestCase {
 		$this->assertStringNotContainsString( 'notice-error', $this->render( $metabox ) );
 	}
 
+	/**
+	 * A required field says so in the heading this class draws.
+	 *
+	 * The kit marks it in the label it draws; the metabox draws the label
+	 * in the header cell, so the mark never appeared there.
+	 */
+	public function test_a_required_field_is_marked_in_its_heading(): void {
+		$html = $this->render(
+			$this->metabox(
+				[
+					'fields' => [
+						'headline' => [ 'type' => 'text', 'label' => 'Headline', 'required' => true ],
+						'strap'    => [ 'type' => 'text', 'label' => 'Strap' ],
+					],
+				]
+			)
+		);
+
+		$this->assertMatchesRegularExpression( '/Headline<span class="field-kit__required" aria-hidden="true">\*<\/span>/', $html );
+		$this->assertDoesNotMatchRegularExpression( '/Strap<span class="field-kit__required"/', $html );
+	}
+
 }
